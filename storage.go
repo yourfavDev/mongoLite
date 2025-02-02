@@ -20,7 +20,7 @@ const dataFile = "mongo.local"
 var lock sync.Mutex
 
 // insertDocument takes a JSON string, parses it, and appends it to the file.
-func insertDocument(jsonStr string) error {
+func InsertDocument(jsonStr string) error {
 	var doc Document
 	if err := json.Unmarshal([]byte(jsonStr), &doc); err != nil {
 		return fmt.Errorf("failed to parse JSON: %w", err)
@@ -52,7 +52,7 @@ func insertDocument(jsonStr string) error {
 
 // searchDocuments reads the file and returns a JSON array (as string) of documents
 // that match all key-value pairs in the query.
-func searchDocuments(queryStr string) (string, error) {
+func SearchDocuments(queryStr string) (string, error) {
 	var query map[string]interface{}
 	if err := json.Unmarshal([]byte(queryStr), &query); err != nil {
 		return "", fmt.Errorf("failed to parse query JSON: %w", err)
@@ -104,7 +104,7 @@ func searchDocuments(queryStr string) (string, error) {
 
 // deleteDocuments removes documents that match the query.
 // It returns the number of documents deleted.
-func deleteDocuments(queryStr string) (int, error) {
+func DeleteDocuments(queryStr string) (int, error) {
 	var query map[string]interface{}
 	if err := json.Unmarshal([]byte(queryStr), &query); err != nil {
 		return 0, fmt.Errorf("failed to parse query JSON: %w", err)

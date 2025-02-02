@@ -9,10 +9,10 @@ import "fmt"
 // InsertDocument is the C-accessible function for inserting a document.
 // It receives a C string (JSON document) and returns a C string with a result message.
 //
-//export InsertDocument
-func InsertDocument(cjson *C.char) *C.char {
+//export InsertDocumentC
+func InsertDocumentC(cjson *C.char) *C.char {
 	jsonStr := C.GoString(cjson)
-	err := insertDocument(jsonStr)
+	err := InsertDocument(jsonStr)
 	var result string
 	if err != nil {
 		result = "InsertDocument error: " + err.Error()
@@ -26,10 +26,10 @@ func InsertDocument(cjson *C.char) *C.char {
 // It receives a C string (JSON query) and returns a C string containing a JSON array of
 // matching documents, or an error message.
 //
-//export SearchDocument
-func SearchDocument(cquery *C.char) *C.char {
+//export SearchDocumentC
+func SearchDocumentC(cquery *C.char) *C.char {
 	queryStr := C.GoString(cquery)
-	results, err := searchDocuments(queryStr)
+	results, err := SearchDocuments(queryStr)
 	var result string
 	if err != nil {
 		result = "SearchDocument error: " + err.Error()
@@ -42,10 +42,10 @@ func SearchDocument(cquery *C.char) *C.char {
 // DeleteDocument is the C-accessible function for deleting documents.
 // It receives a C string (JSON query) and returns a C string with a result message.
 //
-//export DeleteDocument
-func DeleteDocument(cquery *C.char) *C.char {
+//export DeleteDocumentC
+func DeleteDocumentC(cquery *C.char) *C.char {
 	queryStr := C.GoString(cquery)
-	deletedCount, err := deleteDocuments(queryStr)
+	deletedCount, err := DeleteDocuments(queryStr)
 	var result string
 	if err != nil {
 		result = "DeleteDocument error: " + err.Error()

@@ -12,13 +12,13 @@ func setup() {
 
 func TestInsertDocument(t *testing.T) {
 	setup()
-	err := insertDocument(`{"name": "test", "value": 123}`)
+	err := InsertDocument(`{"name": "test", "value": 123}`)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
 	// Verify the document was inserted.
-	results, err := searchDocuments(`{"name": "test"}`)
+	results, err := SearchDocuments(`{"name": "test"}`)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -30,10 +30,10 @@ func TestInsertDocument(t *testing.T) {
 
 func TestSearchDocuments(t *testing.T) {
 	setup()
-	insertDocument(`{"name": "test1", "value": 123}`)
-	insertDocument(`{"name": "test2", "value": 456}`)
+	InsertDocument(`{"name": "test1", "value": 123}`)
+	InsertDocument(`{"name": "test2", "value": 456}`)
 
-	results, err := searchDocuments(`{"value": 123}`)
+	results, err := SearchDocuments(`{"value": 123}`)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -45,10 +45,10 @@ func TestSearchDocuments(t *testing.T) {
 
 func TestDeleteDocuments(t *testing.T) {
 	setup()
-	insertDocument(`{"name": "test1", "value": 123}`)
-	insertDocument(`{"name": "test2", "value": 456}`)
+	InsertDocument(`{"name": "test1", "value": 123}`)
+	InsertDocument(`{"name": "test2", "value": 456}`)
 
-	deletedCount, err := deleteDocuments(`{"value": 123}`)
+	deletedCount, err := DeleteDocuments(`{"value": 123}`)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -57,7 +57,7 @@ func TestDeleteDocuments(t *testing.T) {
 	}
 
 	// Verify the document was deleted.
-	results, err := searchDocuments(`{"value": 123}`)
+	results, err := SearchDocuments(`{"value": 123}`)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
