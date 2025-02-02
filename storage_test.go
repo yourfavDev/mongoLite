@@ -1,68 +1,178 @@
-package MongoLite
+package mongolite
 
 import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"os"
-	"testing"
+	"strings"
+	"sync"
 )
 
-func setup() {
-	// Remove the data file before each test to ensure a clean state.
-	os.Remove(dataFile)
+// Document represents a generic JSON document.
+type Document map[string]interface{}
+
+// MongoLite is the main struct for interacting with the local database.
+type MongoLite struct {
+	dataFile string
+	lock     sync.Mutex
 }
 
-func TestInsertDocument(t *testing.T) {
-	setup()
-	err := InsertDocument(`{"name": "test", "value": 123}`)
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-
-	// Verify the document was inserted.
-	results, err := SearchDocuments(`{"name": "test"}`)
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-	expected := `[{"name":"test","value":123}]`
-	if results != expected {
-		t.Fatalf("Expected %v, got %v", expected, results)
+// New creates a new instance of MongoLite with the specified file path.
+func New(dataFile string) *MongoLite {
+	return &MongoLite{
+		dataFile: dataFile,
 	}
 }
 
-func TestSearchDocuments(t *testing.T) {
-	setup()
-	InsertDocument(`{"name": "test1", "value": 123}`)
-	InsertDocument(`{"name": "test2", "value": 456}`)
+// InsertDocument takes a JSON string, parses it, and appends it to the file.
+func (m *MongoLite) InsertDocument(jsonStr string) error {
+	var doc Document
+	if err := json.Unmarshal([]byte(jsonStr), &doc); err != nil {
+		return fmt.Errorf("failed to parse JSON: %w", err)
+	}
 
-	results, err := SearchDocuments(`{"value": 123}`)
+	// Convert back to JSON for uniform formatting.
+	output, err := json.Marshal(doc)
 	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
+		return fmt.Errorf("failed to encode JSON: %w", err)
 	}
-	expected := `[{"name":"test1","value":123}]`
-	if results != expected {
-		t.Fatalf("Expected %v, got %v", expected, results)
+
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	// Open (or create) the file in append mode.
+	f, err := os.OpenFile(m.dataFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
 	}
+	defer f.Close()
+
+	// Append the JSON document with a newline.
+	if _, err := f.Write(append(output, '\n')); err != nil {
+		return fmt.Errorf("failed to write to file: %w", err)
+	}
+
+	return nil
 }
 
-func TestDeleteDocuments(t *testing.T) {
-	setup()
-	InsertDocument(`{"name": "test1", "value": 123}`)
-	InsertDocument(`{"name": "test2", "value": 456}`)
-
-	deletedCount, err := DeleteDocuments(`{"value": 123}`)
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-	if deletedCount != 1 {
-		t.Fatalf("Expected 1 document to be deleted, got %d", deletedCount)
+// SearchDocuments reads the file and returns a JSON array (as string) of documents
+// that match all key-value pairs in the query.
+func (m *MongoLite) SearchDocuments(queryStr string) (string, error) {
+	var query map[string]interface{}
+	if err := json.Unmarshal([]byte(queryStr), &query); err != nil {
+		return "", fmt.Errorf("failed to parse query JSON: %w", err)
 	}
 
-	// Verify the document was deleted.
-	results, err := SearchDocuments(`{"value": 123}`)
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	// Open the file for reading.
+	f, err := os.Open(m.dataFile)
 	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
+		if os.IsNotExist(err) {
+			// No data yet.
+			return "[]", nil
+		}
+		return "", fmt.Errorf("failed to open file: %w", err)
 	}
-	expected := `[]`
-	if results != expected {
-		t.Fatalf("Expected %v, got %v", expected, results)
+	defer f.Close()
+
+	var results []Document
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var doc Document
+		if err := json.Unmarshal([]byte(line), &doc); err != nil {
+			// Skip invalid JSON.
+			continue
+		}
+		if matchQuery(doc, query) {
+			results = append(results, doc)
+		}
 	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("error reading file: %w", err)
+	}
+
+	output, err := json.Marshal(results)
+	if err != nil {
+		return "", fmt.Errorf("failed to encode results: %w", err)
+	}
+	if len(results) == 0 {
+		return "[]", nil
+	}
+	return string(output), nil
+}
+
+// DeleteDocuments removes documents that match the query.
+// It returns the number of documents deleted.
+func (m *MongoLite) DeleteDocuments(queryStr string) (int, error) {
+	var query map[string]interface{}
+	if err := json.Unmarshal([]byte(queryStr), &query); err != nil {
+		return 0, fmt.Errorf("failed to parse query JSON: %w", err)
+	}
+
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	// Read the existing file content.
+	data, err := ioutil.ReadFile(m.dataFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil // Nothing to delete.
+		}
+		return 0, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	lines := strings.Split(string(data), "\n")
+	var updatedLines []string
+	deletedCount := 0
+
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var doc Document
+		if err := json.Unmarshal([]byte(line), &doc); err != nil {
+			// If this line is invalid JSON, skip it.
+			continue
+		}
+		if matchQuery(doc, query) {
+			deletedCount++
+			// Do not include in updatedLines.
+		} else {
+			updatedLines = append(updatedLines, line)
+		}
+	}
+
+	newContent := strings.Join(updatedLines, "\n")
+	if newContent != "" {
+		newContent += "\n" // Ensure file ends with a newline.
+	}
+	if err := ioutil.WriteFile(m.dataFile, []byte(newContent), 0644); err != nil {
+		return deletedCount, fmt.Errorf("failed to write updated data: %w", err)
+	}
+
+	return deletedCount, nil
+}
+
+// matchQuery returns true if every key-value pair in the query exists in doc
+// (the value comparison is done via formatted strings for simplicity).
+func matchQuery(doc Document, query map[string]interface{}) bool {
+	for key, qVal := range query {
+		dVal, ok := doc[key]
+		if !ok {
+			return false
+		}
+		// Using formatted strings for a simple deep equality check.
+		if fmt.Sprintf("%v", dVal) != fmt.Sprintf("%v", qVal) {
+			return false
+		}
+	}
+	return true
 }

@@ -1,4 +1,4 @@
-package MongoLite
+package mongoLite
 
 import (
 	"bufio"
