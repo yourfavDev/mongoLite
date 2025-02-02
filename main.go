@@ -1,3 +1,0 @@
-package MongoLite
-
-func main() {}
